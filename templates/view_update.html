@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}{{ item.title }} · DailyUpdates{% endblock %}
+{% block content %}
+<a href="{{ url_for('dashboard') }}" class="text-decoration-none">← Back to updates</a>
+<article class="form-panel mt-3">
+  <div class="d-flex flex-wrap justify-content-between gap-2"><span class="category-pill">{{ item.category }}</span><span class="priority priority-{{ item.priority|lower }}">{{ item.priority }}</span></div>
+  <h1 class="h2 fw-bold mt-3">{{ item.title }}</h1>
+  <p class="text-secondary small">{{ item.created_at.replace('T',' ') }} · Posted by {{ item.author }}</p>
+  <div class="update-body">{{ item.body }}</div>
+  {% if item.attachment %}
+    {% if item.attachment.rsplit('.',1)[-1].lower() in ['png','jpg','jpeg','gif','webp'] %}
+      <img class="detail-image mt-3" src="{{ url_for('uploaded_file', filename=item.attachment) }}" alt="Update attachment">
+    {% endif %}
+    <p class="mt-3">📎 <a href="{{ url_for('uploaded_file', filename=item.attachment) }}" target="_blank" rel="noopener">{{ item.attachment.split('_',1)[-1] }}</a></p>
+  {% endif %}
+</article>
+{% endblock %}

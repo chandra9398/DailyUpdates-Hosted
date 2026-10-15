@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block title %}My Notepad · DailyUpdates{% endblock %}
+{% block content %}
+<div class="mb-4"><h1 class="h2 fw-bold mb-1">My Notepad</h1><p class="text-secondary mb-0">Your private notes are saved under your account.</p></div>
+<div class="row g-4">
+  <div class="col-lg-5"><section class="form-panel">
+    <h2 class="h5 fw-bold mb-3">{{ 'Edit note' if edit_note else 'Create a note' }}</h2>
+    <form method="post" action="{{ url_for('notes') }}">
+      {% if edit_note %}<input type="hidden" name="note_id" value="{{ edit_note.id }}">{% endif %}
+      <div class="mb-3"><label class="form-label" for="title">Title</label><input class="form-control" id="title" name="title" maxlength="150" value="{{ edit_note.title if edit_note else '' }}" placeholder="e.g. Today's tasks"></div>
+      <div class="mb-3"><label class="form-label" for="body">Note</label><textarea class="form-control" id="body" name="body" rows="9" placeholder="Write your note here...">{{ edit_note.body if edit_note else '' }}</textarea></div>
+      <button class="btn btn-primary">💾 Save note</button> {% if edit_note %}<a class="btn btn-outline-secondary" href="{{ url_for('notes') }}">Cancel</a>{% endif %}
+    </form>
+    <p class="form-text mt-3 mb-0">Click Save note to store it. Only your account can view, edit, or delete it.</p>
+  </section></div>
+  <div class="col-lg-7"><h2 class="h5 fw-bold mb-3">Saved notes ({{ notes|length }})</h2><div class="d-grid gap-3">
+    {% for note in notes %}<article class="update-card">
+      <div class="d-flex justify-content-between align-items-start gap-2"><h3 class="h6 fw-bold mb-1">{{ note.title }}</h3><span class="text-secondary small">{{ note.updated_at.replace('T',' ') }}</span></div>
+      <p class="body-preview mt-2 mb-3">{{ note.body }}</p>
+      <div class="d-flex gap-2"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('notes', edit=note.id) }}">Edit</a>
+      <form method="post" action="{{ url_for('delete_note', note_id=note.id) }}" onsubmit="return confirm('Delete this note?')"><button class="btn btn-sm btn-outline-danger">Delete</button></form></div>
+    </article>{% else %}<div class="empty-state"><div class="display-6">📝</div><h3 class="h6">No saved notes yet</h3><p class="text-secondary mb-0">Create your first note using the form.</p></div>{% endfor %}
+  </div></div>
+</div>
+{% endblock %}

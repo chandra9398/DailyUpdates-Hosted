@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block title %}Open Excel · DailyUpdates{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div><h1 class="h3 fw-bold mb-1">{{ file.original_name }}</h1><p class="text-secondary mb-0">Excel preview · up to 200 rows and 20 columns per sheet</p></div>
+  <div class="d-flex gap-2"><a class="btn btn-outline-primary" href="{{ url_for('download_user_file', file_id=file.id) }}">Download Excel</a><a class="btn btn-outline-secondary" href="{{ url_for('my_files') }}">Back to files</a></div>
+</div>
+{% for sheet in sheets %}
+<section class="form-panel mb-4"><h2 class="h5 fw-bold mb-3">{{ sheet.name }}</h2>
+  {% if sheet.rows %}<div class="table-responsive"><table class="table table-sm table-striped table-bordered align-middle"><tbody>
+  {% for row in sheet.rows %}{% set row_is_header = loop.first %}<tr>{% for cell in row %}{% if row_is_header %}<th class="text-nowrap">{{ cell }}</th>{% else %}<td>{{ cell }}</td>{% endif %}{% endfor %}</tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="text-secondary mb-0">This sheet is empty.</p>{% endif %}
+</section>
+{% endfor %}
+{% endblock %}

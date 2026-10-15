@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}Edit Word · DailyUpdates{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h1 class="h3 fw-bold mb-1">Edit {{ file.original_name }}</h1><p class="text-secondary mb-0">Edit each paragraph below. Paragraph formatting may be simplified when saved; tables and images are preserved.</p></div><a class="btn btn-outline-secondary" href="{{ url_for('my_files') }}">Back to files</a></div>
+<form method="post" class="form-panel"><div class="d-grid gap-3">{% for paragraph in paragraphs %}<div><label class="form-label small text-secondary">Paragraph {{ loop.index }}</label><textarea class="form-control" name="paragraphs" rows="{{ 2 if paragraph|length < 120 else 4 }}">{{ paragraph }}</textarea></div>{% else %}<p class="text-secondary">This document has no editable paragraphs.</p>{% endfor %}</div><div class="d-flex flex-wrap gap-2 mt-4"><button class="btn btn-primary">💾 Save changes</button><a class="btn btn-outline-primary" href="{{ url_for('download_user_file', file_id=file.id) }}">⬇️ Download current file</a></div></form>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block title %}Dashboard · DailyUpdates{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+  <div><h1 class="h2 fw-bold mb-1">{% if session.get('role') == 'admin' %}Admin Dashboard{% else %}My Daily Updates{% endif %}</h1><p class="text-secondary mb-0">Information shared with you is saved here automatically.</p></div>
+  {% if session.get('role') == 'admin' %}<a class="btn btn-primary" href="{{ url_for('create_update') }}">＋ Create Update</a>{% endif %}
+</div>
+<form class="filter-bar row g-2 mb-4" method="get">
+  <div class="col-md-6"><input class="form-control" name="q" value="{{ q }}" placeholder="Search title or description..."></div>
+  <div class="col-md-4"><select class="form-select" name="category"><option value="">All categories</option>{% for c in categories %}<option {% if category==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+  <div class="col-md-2 d-grid"><button class="btn btn-outline-primary">Filter</button></div>
+</form>
+<div class="row g-3">
+{% for item in updates %}
+  <div class="col-md-6 col-xl-4"><article class="update-card h-100">
+    <div class="d-flex justify-content-between align-items-start gap-2"><span class="category-pill">{{ item.category }}</span><span class="priority priority-{{ item.priority|lower }}">{{ item.priority }}</span></div>
+    <h2 class="h5 mt-3 fw-bold">{{ item.title }}</h2>
+    <p class="text-secondary small mb-2">{{ item.created_at.replace('T',' ') }} · by {{ item.author }}</p>
+    <p class="body-preview">{{ item.body }}</p>
+    {% if item.attachment %}
+      {% if item.attachment.rsplit('.',1)[-1].lower() in ['png','jpg','jpeg','gif','webp'] %}
+        <img class="attachment-preview" src="{{ url_for('uploaded_file', filename=item.attachment) }}" alt="Update attachment">
+      {% else %}<p class="small">📎 {{ item.attachment.split('_',1)[-1] }}</p>{% endif %}
+    {% endif %}
+    <div class="d-flex gap-2 mt-3"><a class="btn btn-primary btn-sm" href="{{ url_for('view_update', update_id=item.id) }}">Read update</a>
+      {% if session.get('role') == 'admin' %}<form method="post" action="{{ url_for('delete_update', update_id=item.id) }}" onsubmit="return confirm('Delete this update?')"><button class="btn btn-outline-danger btn-sm">Delete</button></form>{% endif %}
+    </div>
+  </article></div>
+{% else %}
+  <div class="col-12"><div class="empty-state"><div class="display-6">📭</div><h2 class="h5">No updates found</h2><p class="text-secondary mb-0">Try a different search, or ask the admin to publish an update.</p></div></div>
+{% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}Edit Text · DailyUpdates{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h1 class="h3 fw-bold mb-1">Edit {{ file.original_name }}</h1><p class="text-secondary mb-0">Edit the text below, then click Save changes. The saved content replaces your uploaded TXT file.</p></div><a class="btn btn-outline-secondary" href="{{ url_for('my_files') }}">Back to files</a></div>
+<form method="post" class="form-panel" accept-charset="UTF-8"><label for="content" class="form-label fw-semibold">File content</label><textarea id="content" name="content" class="form-control font-monospace mb-3" rows="22" spellcheck="false" maxlength="512000">{{ content }}</textarea><div class="d-flex flex-wrap gap-2"><button class="btn btn-primary">💾 Save changes</button><a class="btn btn-outline-primary" href="{{ url_for('download_user_file', file_id=file.id) }}">⬇️ Download current file</a></div></form>
+{% endblock %}
