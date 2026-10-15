@@ -1,50 +1,174 @@
-{% extends "base.html" %}{% block title %}My Files · DailyUpdates{% endblock %}
+
+{% extends "base.html" %}
+{% block title %}My Files · DailyUpdates{% endblock %}
+
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-  <div><h1 class="h2 fw-bold mb-1">My Files</h1><p class="text-secondary mb-0">Upload and organize your private files. Admin-shared files appear here too.</p></div>
+  <div>
+    <h1 class="h2 fw-bold mb-1">My Files</h1>
+    <p class="text-secondary mb-0">
+      Upload and organize your private files. Admin-shared files appear here too.
+    </p>
+  </div>
 </div>
+
 <div class="row g-4">
-  <div class="col-lg-4"><section class="form-panel">
-    <h2 class="h5 fw-bold mb-3">⬆️ Upload a file</h2>
-    <form method="post" enctype="multipart/form-data">
-      <label class="form-label" for="file">Choose file</label>
-      <input class="form-control mb-3" id="file" type="file" name="file" accept=".pdf,.doc,.docx,.txt,.xlsx,.png,.jpg,.jpeg,.gif,.webp" required>
-      {% if session.get('role') == 'admin' %}
-      <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="is_shared" value="yes" id="is_shared"><label class="form-check-label" for="is_shared">Share this file with all users</label></div>
-      {% endif %}
-      <button class="btn btn-primary w-100">Upload file</button>
-    </form>
-    <p class="form-text mt-3 mb-0">Allowed: PDF, TXT, XLSX, DOC, DOCX, PNG, JPG, GIF, WEBP. Maximum request size: 10 MB.</p>
-  </section></div>
+
+  <!-- Upload form -->
+  <div class="col-lg-4">
+    <section class="form-panel">
+      <h2 class="h5 fw-bold mb-3">⬆️ Upload a file</h2>
+
+      <form method="post" enctype="multipart/form-data">
+        <label class="form-label" for="file">Choose file</label>
+        <input
+          class="form-control mb-3"
+          id="file"
+          type="file"
+          name="file"
+          accept=".pdf,.doc,.docx,.txt,.xlsx,.png,.jpg,.jpeg,.gif,.webp"
+          required>
+
+        {% if session.get('role') == 'admin' %}
+        <div class="form-check mb-3">
+          <input class="form-check-input"
+                 type="checkbox"
+                 name="is_shared"
+                 value="yes"
+                 id="is_shared">
+          <label class="form-check-label" for="is_shared">
+            Share this file with all users
+          </label>
+        </div>
+        {% endif %}
+
+        <button class="btn btn-primary w-100">Upload file</button>
+      </form>
+
+      <p class="form-text mt-3 mb-0">
+        Allowed: PDF, TXT, XLSX, DOC, DOCX, PNG, JPG, GIF, WEBP.
+        Maximum request size: 10 MB.
+      </p>
+    </section>
+  </div>
+
+  <!-- Saved files -->
   <div class="col-lg-8">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3"><h2 class="h5 fw-bold mb-0">Saved files ({{ files|length }})</h2>
-      <div class="btn-group btn-group-sm"><a class="btn {{ 'btn-primary' if not category else 'btn-outline-primary' }}" href="{{ url_for('my_files') }}">All</a><a class="btn {{ 'btn-primary' if category=='images' else 'btn-outline-primary' }}" href="{{ url_for('my_files', category='images') }}">Images</a><a class="btn {{ 'btn-primary' if category=='documents' else 'btn-outline-primary' }}" href="{{ url_for('my_files', category='documents') }}">Documents</a></div>
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+      <h2 class="h5 fw-bold mb-0">
+        Saved files ({{ files|length }})
+      </h2>
+
+      <div class="btn-group btn-group-sm">
+        <a class="btn {{ 'btn-primary' if not category else 'btn-outline-primary' }}"
+           href="{{ url_for('my_files') }}">All</a>
+        <a class="btn {{ 'btn-primary' if category=='images' else 'btn-outline-primary' }}"
+           href="{{ url_for('my_files', category='images') }}">Images</a>
+        <a class="btn {{ 'btn-primary' if category=='documents' else 'btn-outline-primary' }}"
+           href="{{ url_for('my_files', category='documents') }}">Documents</a>
+      </div>
     </div>
+
     <div class="d-grid gap-3">
       {% for file in files %}
+      {% set ext = file.original_name.rsplit('.', 1)[-1].lower()
+                   if '.' in file.original_name else '' %}
+
       <article class="update-card">
         <div class="d-flex align-items-start gap-3">
-          <div class="file-icon">{{ '🖼️' if file.file_category=='images' else '📄' }}</div>
+
+          <div class="file-icon">
+            {{ '🖼️' if ext in ['png', 'jpg', 'jpeg', 'gif', 'webp']
+               else '📄' }}
+          </div>
+
           <div class="flex-grow-1 min-width-0">
-            <h3 class="h6 fw-bold mb-1 text-break">{{ file.original_name }}</h3>
-            <p class="small text-secondary mb-2">{{ file.file_category|title }} · {{ file.uploaded_at.replace('T',' ') }} · Owner: {{ file.owner_name }}{% if file.is_shared %} · Shared{% endif %}</p>
+            <h3 class="h6 fw-bold mb-1 text-break">
+              {{ file.original_name }}
+            </h3>
+
+            <p class="small text-secondary mb-2">
+              {{ file.file_category|title }} ·
+              {{ file.uploaded_at.replace('T',' ') }} ·
+              Owner: {{ file.owner_name }}
+              {% if file.is_shared %} · Shared{% endif %}
+            </p>
+
+            <!-- Image preview -->
+            {% if ext in ['png', 'jpg', 'jpeg', 'gif', 'webp'] %}
+            <div class="my-3">
+              <a href="{{ url_for('download_user_file', file_id=file.id) }}"
+                 target="_blank"
+                 rel="noopener"
+                 title="Open or download full-size image">
+                <img
+                  src="{{ url_for('download_user_file', file_id=file.id) }}"
+                  alt="{{ file.original_name }}"
+                  loading="lazy"
+                  class="img-fluid rounded border"
+                  style="display:block; max-width:100%; max-height:320px; width:auto; height:auto; object-fit:contain;">
+              </a>
+              <p class="small text-secondary mt-2 mb-0">
+                Click the image to open it.
+              </p>
+            </div>
+            {% endif %}
+
+            <!-- File actions -->
             <div class="d-flex flex-wrap gap-2">
-              {% set ext = file.original_name.rsplit('.', 1)[-1].lower() if '.' in file.original_name else '' %}
-              {% if ext in ['pdf', 'txt', 'xlsx'] %}<a class="btn btn-sm btn-primary" target="_blank" rel="noopener" href="{{ url_for('open_user_file', file_id=file.id) }}">👁️ Open</a>{% endif %}
-              {% if ext in ['txt', 'xlsx', 'docx'] and file.owner_id == session.get('user_id') %}<a class="btn btn-sm btn-outline-success" href="{{ url_for('edit_user_file', file_id=file.id) }}">✏️ Edit</a>{% endif %}
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_user_file', file_id=file.id) }}">⬇️ Download</a>
-              {% if session.get('role') == 'admin' and file.owner_id == session.get('user_id') %}
-              <form method="post" action="{{ url_for('toggle_file_share', file_id=file.id) }}"><button class="btn btn-sm btn-outline-secondary">{{ 'Make private' if file.is_shared else 'Share with users' }}</button></form>
+              {% if ext in ['pdf', 'txt', 'xlsx'] %}
+              <a class="btn btn-sm btn-primary"
+                 target="_blank"
+                 rel="noopener"
+                 href="{{ url_for('open_user_file', file_id=file.id) }}">
+                👁️ Open
+              </a>
               {% endif %}
-              {% if file.owner_id == session.get('user_id') or session.get('role') == 'admin' and file.is_shared %}
-              <form method="post" action="{{ url_for('delete_user_file', file_id=file.id) }}" onsubmit="return confirm('Delete this file?')"><button class="btn btn-sm btn-outline-danger">Delete</button></form>
+
+              {% if ext in ['txt', 'xlsx', 'docx']
+                    and file.owner_id == session.get('user_id') %}
+              <a class="btn btn-sm btn-outline-success"
+                 href="{{ url_for('edit_user_file', file_id=file.id) }}">
+                ✏️ Edit
+              </a>
+              {% endif %}
+
+              <a class="btn btn-sm btn-outline-primary"
+                 href="{{ url_for('download_user_file', file_id=file.id) }}">
+                ⬇️ Download
+              </a>
+
+              {% if session.get('role') == 'admin'
+                    and file.owner_id == session.get('user_id') %}
+              <form method="post"
+                    action="{{ url_for('toggle_file_share', file_id=file.id) }}">
+                <button class="btn btn-sm btn-outline-secondary">
+                  {{ 'Make private' if file.is_shared else 'Share with users' }}
+                </button>
+              </form>
+              {% endif %}
+
+              {% if file.owner_id == session.get('user_id')
+                    or (session.get('role') == 'admin' and file.is_shared) %}
+              <form method="post"
+                    action="{{ url_for('delete_user_file', file_id=file.id) }}"
+                    onsubmit="return confirm('Delete this file?')">
+                <button class="btn btn-sm btn-outline-danger">Delete</button>
+              </form>
               {% endif %}
             </div>
           </div>
         </div>
       </article>
+
       {% else %}
-      <div class="empty-state"><div class="display-6">📁</div><h3 class="h6">No files yet</h3><p class="text-secondary mb-0">Upload a file to see it here.</p></div>
+      <div class="empty-state">
+        <div class="display-6">📁</div>
+        <h3 class="h6">No files yet</h3>
+        <p class="text-secondary mb-0">
+          Upload a file to see it here.
+        </p>
+      </div>
       {% endfor %}
     </div>
   </div>
