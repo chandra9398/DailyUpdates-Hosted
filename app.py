@@ -1,8 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-import sqlite3, os, secrets, mimetypes
-from datetime import datetime
+import sqlite3, os, secrets, mimetypes, smtplib, hashlib, re
+from email.message import EmailMessage
+from datetime import datetime, timedelta
 from functools import wraps
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -38,6 +39,15 @@ def init_db():
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'user',
             created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS password_reset_otps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL UNIQUE,
+            otp_hash TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS updates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,6 +108,39 @@ def init_db():
                 "INSERT INTO users(username,password_hash,role,created_at) VALUES(?,?,?,?)",
                 ("admin", generate_password_hash("Admin@123"), "admin", datetime.now().isoformat(timespec="seconds"))
             )
+
+def send_password_reset_otp(destination_email, otp):
+    """Send a password reset OTP using SMTP environment settings."""
+    smtp_host = os.environ.get("SMTP_HOST", "").strip()
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_user = os.environ.get("SMTP_USER", "").strip()
+    smtp_password = os.environ.get("SMTP_PASSWORD", "")
+    from_email = os.environ.get("SMTP_FROM", "").strip() or smtp_user
+
+    if not all([smtp_host, smtp_user, smtp_password, from_email]):
+        app.logger.error("Password reset email is not configured: SMTP settings are missing.")
+        return False
+
+    message = EmailMessage()
+    message["Subject"] = "DailyUpdates password reset code"
+    message["From"] = from_email
+    message["To"] = destination_email
+    message.set_content(
+        f"Your DailyUpdates password reset OTP is: {otp}\n\n"
+        "This code expires in 10 minutes. Do not share it with anyone. "
+        "If you did not request a password reset, ignore this email."
+    )
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.send_message(message)
+        return True
+    except Exception:
+        app.logger.exception("Could not send password reset email.")
+        return False
+
 
 def login_required(view):
     @wraps(view)
@@ -199,6 +242,136 @@ def login():
         flash("Invalid username/email or password.", "error")
 
     return render_template("login.html")
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        generic_message = (
+            "If an account matches that email and email delivery is configured, "
+            "a reset code will be sent."
+        )
+
+        with db() as con:
+            user = con.execute(
+                "SELECT id, email FROM users WHERE email = ? COLLATE NOCASE",
+                (email,),
+            ).fetchone()
+
+            if user and user["email"]:
+                otp = f"{secrets.randbelow(1_000_000):06d}"
+                otp_hash = hashlib.sha256(otp.encode("utf-8")).hexdigest()
+                now = datetime.now()
+                expires = (now + timedelta(minutes=10)).isoformat(timespec="seconds")
+
+                con.execute(
+                    """INSERT INTO password_reset_otps
+                       (user_id, otp_hash, expires_at, attempts, created_at)
+                       VALUES (?, ?, ?, 0, ?)
+                       ON CONFLICT(user_id) DO UPDATE SET
+                           otp_hash=excluded.otp_hash,
+                           expires_at=excluded.expires_at,
+                           attempts=0,
+                           created_at=excluded.created_at""",
+                    (
+                        user["id"],
+                        otp_hash,
+                        expires,
+                        now.isoformat(timespec="seconds"),
+                    ),
+                )
+
+                if not send_password_reset_otp(user["email"], otp):
+                    app.logger.warning("Password reset email delivery failed.")
+
+        flash(generic_message, "info")
+        return redirect(url_for("reset_password", email=email))
+
+    return render_template("forgot_password.html")
+
+
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    email = request.args.get("email", "").strip().lower()
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        otp = request.form.get("otp", "").strip()
+        new_password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if len(new_password) < 8:
+            flash("Password must be at least 8 characters.", "error")
+            return render_template("reset_password.html", email=email)
+
+        if new_password != confirm_password:
+            flash("Passwords do not match.", "error")
+            return render_template("reset_password.html", email=email)
+
+        if not re.fullmatch(r"\d{6}", otp):
+            flash("Enter the 6-digit OTP sent to your email.", "error")
+            return render_template("reset_password.html", email=email)
+
+        with db() as con:
+            user = con.execute(
+                "SELECT id FROM users WHERE email = ? COLLATE NOCASE",
+                (email,),
+            ).fetchone()
+
+            if not user:
+                flash("Invalid or expired OTP. Request a new code.", "error")
+                return render_template("reset_password.html", email=email)
+
+            reset_record = con.execute(
+                "SELECT * FROM password_reset_otps WHERE user_id = ?",
+                (user["id"],),
+            ).fetchone()
+
+            if not reset_record:
+                flash("Invalid or expired OTP. Request a new code.", "error")
+                return render_template("reset_password.html", email=email)
+
+            now = datetime.now()
+
+            if reset_record["attempts"] >= 5:
+                con.execute(
+                    "DELETE FROM password_reset_otps WHERE user_id = ?",
+                    (user["id"],),
+                )
+                flash("Too many attempts. Request a new OTP.", "error")
+                return render_template("reset_password.html", email=email)
+
+            if now > datetime.fromisoformat(reset_record["expires_at"]):
+                con.execute(
+                    "DELETE FROM password_reset_otps WHERE user_id = ?",
+                    (user["id"],),
+                )
+                flash("OTP expired. Request a new code.", "error")
+                return render_template("reset_password.html", email=email)
+
+            provided_hash = hashlib.sha256(otp.encode("utf-8")).hexdigest()
+            if not secrets.compare_digest(provided_hash, reset_record["otp_hash"]):
+                con.execute(
+                    "UPDATE password_reset_otps SET attempts = attempts + 1 WHERE user_id = ?",
+                    (user["id"],),
+                )
+                flash("Invalid OTP.", "error")
+                return render_template("reset_password.html", email=email)
+
+            con.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (generate_password_hash(new_password), user["id"]),
+            )
+            con.execute(
+                "DELETE FROM password_reset_otps WHERE user_id = ?",
+                (user["id"],),
+            )
+
+        flash("Password reset successfully. Please log in.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html", email=email)
 
 
 @app.route("/logout")
