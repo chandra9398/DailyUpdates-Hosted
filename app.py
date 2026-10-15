@@ -34,6 +34,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
+            email TEXT,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'user',
             created_at TEXT NOT NULL
@@ -77,6 +78,20 @@ def init_db():
             FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
         );
         """)
+        # Safe migration: add email to existing databases without deleting users.
+        columns = {
+            row["name"] for row in con.execute("PRAGMA table_info(users)").fetchall()
+        }
+        if "email" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN email TEXT")
+
+        # Email addresses must be unique, ignoring case. Existing users can have NULL email.
+        con.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+            ON users(email COLLATE NOCASE)
+            WHERE email IS NOT NULL AND TRIM(email) != ''
+        """)
+
         admin = con.execute("SELECT id FROM users WHERE username = ?", ("admin",)).fetchone()
         if not admin:
             con.execute(
@@ -116,37 +131,75 @@ def home():
 def register():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
-        if len(username) < 3 or len(password) < 8:
-            flash("Username must be at least 3 characters and password at least 8 characters.", "error")
+
+        if len(username) < 3 or len(username) > 80:
+            flash("Username must be between 3 and 80 characters.", "error")
             return render_template("register.html")
+
+        # Basic server-side email validation; the database enforces uniqueness.
+        if (
+            len(email) > 254
+            or email.count("@") != 1
+            or not email.split("@", 1)[0]
+            or "." not in email.rsplit("@", 1)[-1]
+            or any(char.isspace() for char in email)
+        ):
+            flash("Enter a valid email address.", "error")
+            return render_template("register.html")
+
+        if len(password) < 8:
+            flash("Password must be at least 8 characters.", "error")
+            return render_template("register.html")
+
         try:
             with db() as con:
                 con.execute(
-                    "INSERT INTO users(username,password_hash,role,created_at) VALUES(?,?,?,?)",
-                    (username, generate_password_hash(password), "user", datetime.now().isoformat(timespec="seconds"))
+                    """INSERT INTO users
+                       (username, email, password_hash, role, created_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (
+                        username,
+                        email,
+                        generate_password_hash(password),
+                        "user",
+                        datetime.now().isoformat(timespec="seconds"),
+                    ),
                 )
             flash("Account created. You can now log in.", "success")
             return redirect(url_for("login"))
         except sqlite3.IntegrityError:
-            flash("That username is already taken.", "error")
+            flash("That username or email is already registered.", "error")
+
     return render_template("register.html")
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
+        login_value = request.form.get("login", "").strip()
         password = request.form.get("password", "")
+
         with db() as con:
-            user = con.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+            user = con.execute(
+                """SELECT * FROM users
+                   WHERE username = ? COLLATE NOCASE
+                      OR email = ? COLLATE NOCASE""",
+                (login_value, login_value),
+            ).fetchone()
+
         if user and check_password_hash(user["password_hash"], password):
             session.clear()
             session["user_id"] = user["id"]
             session["username"] = user["username"]
             session["role"] = user["role"]
             return redirect(url_for("dashboard"))
-        flash("Invalid username or password.", "error")
+
+        flash("Invalid username/email or password.", "error")
+
     return render_template("login.html")
+
 
 @app.route("/logout")
 def logout():
